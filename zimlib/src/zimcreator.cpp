@@ -121,6 +121,10 @@ namespace zim
       createClusters(src, basename + ".tmp");
       INFO(clusterOffsets.size() << " clusters created");
 
+      INFO("create geo index");
+      createGeoIndex();
+      INFO(articleGeoPoints.size() << " geo points indexed");
+
       INFO("fill header");
       fillHeader(src);
 
@@ -288,6 +292,8 @@ namespace zim
           continue;
 
         Blob blob = src.getData(di->getAid());
+        addGeoPoint(blob, di->getIdx());
+
         if (blob.size() > 0)
           isEmpty = false;
 
@@ -339,6 +345,128 @@ namespace zim
       clustersSize = out.tellp();
     }
 
+    void ZimCreator::addGeoPoint(const Blob& blob, size_t index)
+    {
+      static char const* metaTag = "<meta name=\"geo.position\" content=\"";
+      char const* tag = std::search(blob.data(), blob.end(), metaTag, metaTag + std::strlen(metaTag));
+      if (tag == blob.end())
+        return;
+
+      int32_t latitudeMicroDegrees = parseCoordinateMicroDegrees(tag);
+      if (!tag || *tag != ';')
+        return;
+      tag++;
+      int32_t longitudeMicroDegrees = parseCoordinateMicroDegrees(tag);
+      if (!tag)
+        return;
+
+      ArticleGeoPoint p;
+      p.index = index;
+      p.latitude = Latitude::fromMicroDegrees(latitudeMicroDegrees);
+      p.longitude = Longitude::fromMicroDegrees(longitudeMicroDegrees);
+      articleGeoPoints.push_back(p);
+    }
+
+    void ZimCreator::createGeoIndex()
+    {
+      // Header:
+      // <index_count> <start_1> <start_2> ... <end_n>
+      // Here: only one index
+      char indexHeader[3 * 4];
+      toLittleEndian(uint32_t(1), indexHeader + 0);
+      toLittleEndian(uint32_t(sizeof(indexHeader)), indexHeader + 4);
+      geoIndex.write(indexHeader, sizeof(indexHeader));
+
+      createGeoIndexPart(articleGeoPoints.begin(), articleGeoPoints.end(), 0);
+
+      uint32_t size = geoIndex.tellp();
+      toLittleEndian(size, indexHeader + 8);
+      geoIndex.seekp(0);
+      geoIndex.write(indexHeader, sizeof(indexHeader));
+    }
+
+    void ZimCreator::createGeoIndexPart(ArticleGeoPointIterator begin, ArticleGeoPointIterator end, unsigned depth)
+    {
+      char data[4];
+      if (int(end - begin) < 10)
+      {
+        if (end <= begin)
+          toLittleEndian(uint32_t(0), data);
+        else
+          toLittleEndian(uint32_t(end - begin), data);
+        geoIndex.write(data, 4);
+        for (; begin < end; ++begin)
+          geoIndex << *begin;
+      }
+      else
+      {
+        if (depth % 2)
+          std::sort(begin, end, AxisComparator<1>());
+        else
+          std::sort(begin, end, AxisComparator<0>());
+        ArticleGeoPointIterator median = begin + (end - begin) / 2;
+        uint32_t medianValue = median->axisValue(depth % 2);
+        if (medianValue < 10)
+        {
+          // We cannot have such a median value, because this would make this node a leaf node.
+          log_warn("Dropping points from geo index: Median value of less than 10 encountered - too many small coordinates.");
+          createGeoIndexPart(begin + 1, end, depth);
+          return;
+        }
+        // Decrement the median as long as the value is the same.
+        while (median > begin && (median - 1)->axisValue(depth % 2) == medianValue)
+          --median;
+        toLittleEndian(medianValue, data);
+        geoIndex.write(data, 4);
+        std::ostream::pos_type offsetPos = geoIndex.tellp();
+        // will be overwritten later
+        geoIndex.write(data, 4);
+
+        createGeoIndexPart(begin, median, depth + 1);
+
+        uint32_t greaterPos = uint32_t(geoIndex.tellp());
+        geoIndex.seekp(offsetPos);
+        toLittleEndian(greaterPos, data);
+        geoIndex.write(data, 4);
+        geoIndex.seekp(0, std::ios_base::end);
+
+        createGeoIndexPart(median, end, depth + 1);
+      }
+    }
+
+    int32_t ZimCreator::parseCoordinateMicroDegrees(const char*& text)
+    {
+      bool negative = false;
+      int32_t value = 0;
+      if (*text == '-')
+      {
+        negative = true;
+        ++text;
+      }
+      unsigned beyondDecimal = 0;
+      for (; *text == '.' || ('0' <= *text && *text <= '9'); ++text)
+      {
+        if (*text == '.')
+        {
+          if (beyondDecimal > 0)
+            break;
+          else
+            beyondDecimal = 1;
+        }
+        else
+        {
+          value = value * 10 + (*text - '0');
+          if (beyondDecimal > 0)
+            ++beyondDecimal;
+        }
+      }
+      if (beyondDecimal == 0)
+        beyondDecimal = 1;
+      for (; beyondDecimal < 7; ++beyondDecimal)
+        value *= 10;
+      return negative ? -value : value;
+    }
+
     void ZimCreator::fillHeader(ArticleSource& src)
     {
       std::string mainAid = src.getMainPage();
@@ -375,6 +503,7 @@ namespace zim
       header.setClusterCount( clusterOffsets.size() );
       header.setClusterPtrPos( clusterPtrPos() );
       header.setChecksumPos( checksumPos() );
+      header.setGeoIdxPos( geoIdxPos() );
 
       log_debug(
             "mimeListSize=" << mimeListSize() <<
@@ -383,6 +512,8 @@ namespace zim
            " indexPtrPos=" << urlPtrPos() <<
            " indexSize=" << indexSize() <<
            " indexPos=" << indexPos() <<
+           " geoIndexSize=" << geoIdxSize() <<
+           " geoIndexPos=" << geoIdxPos() <<
            " clusterPtrSize=" << clusterPtrSize() <<
            " clusterPtrPos=" << clusterPtrPos() <<
            " clusterCount=" << clusterCount() <<
@@ -463,6 +594,12 @@ namespace zim
       }
 
       log_debug("after writing fileIdxList - pos=" << out.tellp());
+
+      // write geo index
+
+      out << geoIndex;
+
+      log_debug("after writing geoIdx - pos=" << out.tellp());
 
       // write directory entries
 

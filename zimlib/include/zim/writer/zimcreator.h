@@ -24,6 +24,8 @@
 #include <zim/writer/dirent.h>
 #include <vector>
 #include <map>
+#include <sstream>
+#include <zim/geopoint.h>
 
 namespace zim
 {
@@ -37,6 +39,8 @@ namespace zim
         typedef std::vector<offset_type> OffsetsType;
         typedef std::map<std::string, uint16_t> MimeTypes;
         typedef std::map<uint16_t, std::string> RMimeTypes;
+        typedef std::vector<zim::ArticleGeoPoint> ArticleGeoPointsType;
+        typedef ArticleGeoPointsType::iterator ArticleGeoPointIterator;
 
       private:
         unsigned minChunkSize;
@@ -46,6 +50,8 @@ namespace zim
         DirentsType dirents;
         SizeVectorType titleIdx;
         OffsetsType clusterOffsets;
+        ArticleGeoPointsType articleGeoPoints;
+        std::ostringstream geoIndex;
         MimeTypes mimeTypes;
         RMimeTypes rmimeTypes;
         uint16_t nextMimeIdx;
@@ -56,8 +62,13 @@ namespace zim
         void createDirents(ArticleSource& src);
         void createTitleIndex(ArticleSource& src);
         void createClusters(ArticleSource& src, const std::string& tmpfname);
+        void addGeoPoint(Blob const& blob, size_t index);
+        void createGeoIndex();
+        void createGeoIndexPart(ArticleGeoPointIterator begin, ArticleGeoPointIterator end, unsigned depth = 0);
         void fillHeader(ArticleSource& src);
         void write(const std::string& fname, const std::string& tmpfname);
+
+        static int32_t parseCoordinateMicroDegrees(const char*& text);
 
         size_type clusterCount() const        { return clusterOffsets.size(); }
         size_type articleCount() const        { return dirents.size(); }
@@ -67,8 +78,10 @@ namespace zim
         offset_type urlPtrPos() const         { return mimeListPos() + mimeListSize(); }
         offset_type titleIdxSize() const      { return articleCount() * sizeof(size_type); }
         offset_type titleIdxPos() const       { return urlPtrPos() + urlPtrSize(); }
+        offset_type geoIdxSize() const        { return geoIndex.str().size(); }
+        offset_type geoIdxPos() const         { return titleIdxPos() + titleIdxSize(); }
         offset_type indexSize() const;
-        offset_type indexPos() const          { return titleIdxPos() + titleIdxSize(); }
+        offset_type indexPos() const          { return geoIdxPos() + geoIdxSize(); }
         offset_type clusterPtrSize() const    { return clusterCount() * sizeof(offset_type); }
         offset_type clusterPtrPos() const     { return indexPos() + indexSize(); }
         offset_type checksumPos() const       { return clusterPtrPos() + clusterPtrSize() + clustersSize; }

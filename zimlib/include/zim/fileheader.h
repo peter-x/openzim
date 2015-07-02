@@ -53,6 +53,7 @@ namespace zim
       size_type mainPage;
       size_type layoutPage;
       offset_type checksumPos;
+      offset_type geoIdxPos;
 
     public:
       Fileheader()
@@ -63,7 +64,8 @@ namespace zim
           blobPtrPos(0),
           mainPage(std::numeric_limits<size_type>::max()),
           layoutPage(std::numeric_limits<size_type>::max()),
-          checksumPos(std::numeric_limits<offset_type>::max())
+          checksumPos(std::numeric_limits<offset_type>::max()),
+          geoIdxPos(std::numeric_limits<offset_type>::max())
       {}
 
       const Uuid& getUuid() const                  { return uuid; }
@@ -98,6 +100,10 @@ namespace zim
       bool        hasChecksum() const              { return getMimeListPos() >= 80; }
       offset_type getChecksumPos() const           { return hasChecksum() ? checksumPos : 0; }
       void        setChecksumPos(offset_type p)    { checksumPos = p; }
+
+      bool        hasGeoIdx() const                { return getMimeListPos() >= 88; }
+      offset_type getGeoIdxPos() const             { return hasGeoIdx() ? geoIdxPos : 0; }
+      void        setGeoIdxPos(offset_type p)      { geoIdxPos = p; }
   };
 
   std::ostream& operator<< (std::ostream& out, const Fileheader& fh);
