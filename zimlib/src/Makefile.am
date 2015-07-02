@@ -35,6 +35,7 @@ libzim_la_SOURCES = \
 	fileheader.cpp \
 	fileimpl.cpp \
 	fstream.cpp \
+	geopoint.cpp \
 	indexarticle.cpp \
 	md5.c \
 	md5stream.cpp \

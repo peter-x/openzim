@@ -28,7 +28,7 @@ namespace zim
 {
   const size_type Fileheader::zimMagic = 0x044d495a; // ="ZIM^d"
   const size_type Fileheader::zimVersion = 5;
-  const size_type Fileheader::size = 80;
+  const size_type Fileheader::size = 88;
 
   std::ostream& operator<< (std::ostream& out, const Fileheader& fh)
   {
@@ -45,6 +45,7 @@ namespace zim
     toLittleEndian(fh.getMainPage(), header + 64);
     toLittleEndian(fh.getLayoutPage(), header + 68);
     toLittleEndian(fh.getChecksumPos(), header + 72);
+    toLittleEndian(fh.getGeoIdxPos(), header + 80);
 
     out.write(header, Fileheader::size);
 
@@ -92,6 +93,7 @@ namespace zim
     size_type mainPage = fromLittleEndian(reinterpret_cast<const size_type*>(header + 64));
     size_type layoutPage = fromLittleEndian(reinterpret_cast<const size_type*>(header + 68));
     offset_type checksumPos = fromLittleEndian(reinterpret_cast<const offset_type*>(header + 72));
+    offset_type geoIndexPos = fromLittleEndian(reinterpret_cast<const offset_type*>(header + 80));
 
     fh.setUuid(uuid);
     fh.setArticleCount(articleCount);
@@ -103,6 +105,7 @@ namespace zim
     fh.setMainPage(mainPage);
     fh.setLayoutPage(layoutPage);
     fh.setChecksumPos(checksumPos);
+    fh.setGeoIdxPos(geoIndexPos);
 
     return in;
   }
