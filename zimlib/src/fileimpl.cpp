@@ -35,6 +35,19 @@ log_define("zim.file.impl")
 
 namespace zim
 {
+  namespace
+  {
+    template <typename T>
+    T readFromLittleEndian(zim::ifstream& in, const char* errorMsg)
+    {
+      char buffer[sizeof(T)];
+      in.read(buffer, sizeof(T));
+      if (!in)
+        throw ZimFileFormatError(errorMsg);
+      return fromLittleEndian<T>(reinterpret_cast<const T*>(buffer + 0));
+    }
+  }
+
   //////////////////////////////////////////////////////////////////////
   // FileImpl
   //
@@ -83,6 +96,17 @@ namespace zim
 
       mimeTypes.push_back(mimeType);;
     }
+
+    if (header.hasGeoIdx())
+    {
+      uint32_t indexCount = readFromLittleEndian<uint32_t>(zimFile, "invalid geo index header");
+      for (unsigned i = 0; i < indexCount + 1; ++i)
+      {
+        geoIndices.push_back(readFromLittleEndian<uint32_t>(zimFile, "invalid geo index header"));
+      }
+    }
+    if (geoIndices.size() == 0)
+      geoIndices.push_back(0);
   }
 
   Dirent FileImpl::getDirent(size_type idx)
@@ -293,6 +317,12 @@ namespace zim
     return mimeTypes[idx];
   }
 
+  bool FileImpl::findArticlesByGeoArea(const GeoPoint& min, const GeoPoint& max, size_t maxResults, unsigned index, std::vector<ArticleGeoPoint>& results)
+  {
+    zimFile.seekg(header.getGeoIdxPos() + geoIndices[index]);
+    return findArticlesByGeoAreaInt(min, max, maxResults, 0, results);
+  }
+
   std::string FileImpl::getChecksum()
   {
     if (!header.hasChecksum())
@@ -347,4 +377,44 @@ namespace zim
     return true;
   }
 
+  bool FileImpl::findArticlesByGeoAreaInt(GeoPoint min, GeoPoint max, size_t maxResults, unsigned depth, std::vector<ArticleGeoPoint> &results)
+  {
+    uint32_t value = readFromLittleEndian<uint32_t>(zimFile, "failed to read geo index");
+    if (value == 0)
+    {
+      uint32_t count = readFromLittleEndian<uint32_t>(zimFile, "failed to read geo index");
+      for (uint32_t i = 0; i < count; ++i)
+      {
+        ArticleGeoPoint point;
+        zimFile >> point;
+        if (!zimFile)
+          throw ZimFileFormatError("failed to read geo index");
+        if (min <= point && point <= max)
+        {
+          if (results.size() >= maxResults)
+            return true;
+          else
+            results.push_back(point);
+        }
+      }
+      return false;
+    }
+    size_t greaterPos = header.getGeoIdxPos() + readFromLittleEndian<uint32_t>(zimFile, "failed to read geo index");
+    if (min.axisValue(depth % 2) < value)
+    {
+      GeoPoint maxCopy = max;
+      maxCopy.axisValue(depth % 2) = std::min(maxCopy.axisValue(depth % 2), value);
+      if (findArticlesByGeoAreaInt(min, maxCopy, maxResults, depth + 1, results))
+        return true;
+    }
+    if (value <= max.axisValue(depth % 2))
+    {
+      GeoPoint minCopy = min;
+      minCopy.axisValue(depth % 2) = std::max(minCopy.axisValue(depth % 2), value);
+      zimFile.seekg(greaterPos);
+      if (findArticlesByGeoAreaInt(minCopy, max, maxResults, depth + 1, results))
+        return true;
+    }
+    return false;
+  }
 }

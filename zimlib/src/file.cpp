@@ -198,6 +198,14 @@ namespace zim
   File::const_iterator File::find(const std::string& url)
   { return findx(url).second; }
 
+  bool File::findArticlesByGeoArea(const GeoPoint& min, const GeoPoint& max, size_t maxResults, std::vector<ArticleGeoPoint>& results)
+  {
+    for (unsigned i = 0; i < impl->getCountGeoIndices() && results.size() < maxResults; ++i)
+      if (impl->findArticlesByGeoArea(min, max, maxResults - results.size(), i, results))
+        return true;
+    return false;
+  }
+
   File::const_iterator File::findByTitle(char ns, const std::string& title)
   { return findxByTitle(ns, title).second; }
 
