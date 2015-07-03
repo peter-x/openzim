@@ -26,6 +26,7 @@
 #include <zim/fileimpl.h>
 #include <zim/blob.h>
 #include <zim/smartptr.h>
+#include <zim/geopoint.h>
 
 namespace zim
 {
@@ -85,6 +86,10 @@ namespace zim
       const_iterator findByTitle(char ns, const std::string& title);
       const_iterator find(char ns, const std::string& url);
       const_iterator find(const std::string& url);
+
+      /// Searches the given quasi-rectangular area for articles. @returns true if there are more
+      /// than maxResults results.
+      bool findArticlesByGeoArea(const GeoPoint& min, const GeoPoint& max, size_t maxResults, std::vector<ArticleGeoPoint>& results);
 
       bool good() const    { return impl.getPointer() != 0; }
       time_t getMTime() const   { return impl->getMTime(); }

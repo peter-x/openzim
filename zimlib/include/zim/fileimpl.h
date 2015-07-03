@@ -30,6 +30,7 @@
 #include <zim/cache.h>
 #include <zim/dirent.h>
 #include <zim/cluster.h>
+#include <zim/geopoint.h>
 
 namespace zim
 {
@@ -49,6 +50,8 @@ namespace zim
 
       typedef std::vector<std::string> MimeTypes;
       MimeTypes mimeTypes;
+
+      std::vector<offset_type> geoIndices;
 
       offset_type getOffset(offset_type ptrOffset, size_type idx);
 
@@ -80,8 +83,14 @@ namespace zim
 
       const std::string& getMimeType(uint16_t idx) const;
 
+      unsigned getCountGeoIndices() const      { return geoIndices.size() - 1; }
+      bool findArticlesByGeoArea(const GeoPoint& min, const GeoPoint& max, size_t maxResults, unsigned index, std::vector<ArticleGeoPoint>& results);
+
       std::string getChecksum();
       bool verify();
+
+    private:
+      bool findArticlesByGeoAreaInt(GeoPoint min, GeoPoint max, size_t maxResults, unsigned depth, std::vector<ArticleGeoPoint>& results);
   };
 
 }
