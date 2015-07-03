@@ -69,6 +69,10 @@ namespace zim
       {
         return latitude <= _other.latitude && longitude <= _other.longitude;
       }
+      bool operator!=(GeoPoint const& _other) const
+      {
+        return latitude != _other.latitude || longitude != _other.longitude;
+      }
   };
 
   struct ArticleGeoPoint : GeoPoint

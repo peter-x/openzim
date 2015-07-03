@@ -347,10 +347,12 @@ namespace zim
 
     void ZimCreator::addGeoPoint(const Blob& blob, size_t index)
     {
-      static char const* metaTag = "<meta name=\"geo.position\" content=\"";
-      char const* tag = std::search(blob.data(), blob.end(), metaTag, metaTag + std::strlen(metaTag));
+      static const char* metaTag = "<meta name=\"geo.position\" content=\"";
+      static const size_t metaTagLen = std::strlen(metaTag);
+      char const* tag = std::search(blob.data(), blob.end(), metaTag, metaTag + metaTagLen);
       if (tag == blob.end())
         return;
+      tag += metaTagLen;
 
       int32_t latitudeMicroDegrees = parseCoordinateMicroDegrees(tag);
       if (!tag || *tag != ';')
@@ -388,8 +390,10 @@ namespace zim
     void ZimCreator::createGeoIndexPart(ArticleGeoPointIterator begin, ArticleGeoPointIterator end, unsigned depth)
     {
       char data[4];
-      if (int(end - begin) < 10)
+      // If we have less than 10 points or all remaining points are equal
+      if (end < begin + 10 || end == std::adjacent_find(begin, end, std::not_equal_to<ArticleGeoPoint>()))
       {
+        toLittleEndian(uint32_t(0), data);
         if (end <= begin)
           toLittleEndian(uint32_t(0), data);
         else
@@ -406,16 +410,27 @@ namespace zim
           std::sort(begin, end, AxisComparator<0>());
         ArticleGeoPointIterator median = begin + (end - begin) / 2;
         uint32_t medianValue = median->axisValue(depth % 2);
-        if (medianValue < 10)
+        if (medianValue == 0)
         {
           // We cannot have such a median value, because this would make this node a leaf node.
-          log_warn("Dropping points from geo index: Median value of less than 10 encountered - too many small coordinates.");
+          log_warn("Dropping points from geo index: Median value zero encountered - too many small coordinates.");
           createGeoIndexPart(begin + 1, end, depth);
           return;
         }
-        // Decrement the median as long as the value is the same.
-        while (median > begin && (median - 1)->axisValue(depth % 2) == medianValue)
-          --median;
+        if (median->axisValue(depth % 2) == begin->axisValue(depth % 2))
+        {
+          // median is equal to the first value, increment until it is not equal anymore
+          while (median < end && median->axisValue(depth % 2) == begin->axisValue(depth % 2))
+            ++median;
+          if (median < end)
+            medianValue = median->axisValue(depth % 2);
+        }
+        else
+        {
+          // Decrement the median as long as the value is the same.
+          while (median > begin && (median - 1)->axisValue(depth % 2) == medianValue)
+            --median;
+        }
         toLittleEndian(medianValue, data);
         geoIndex.write(data, 4);
         std::ostream::pos_type offsetPos = geoIndex.tellp();
