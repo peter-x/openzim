@@ -17,6 +17,7 @@
  *
  */
 
+#include <cmath>
 #include <zim/file.h>
 #include <zim/article.h>
 #include "log.h"
@@ -204,6 +205,32 @@ namespace zim
       if (impl->findArticlesByGeoArea(min, max, maxResults - results.size(), i, results))
         return true;
     return false;
+  }
+
+  void File::findClosestArticles(const GeoPoint& point, size_t maxResults, std::vector<ArticleGeoPoint>& results)
+  {
+    //@todo This is just a very crude way to search for closest articles.
+    // It does not take the "edges of the world" into account and might be wrong if many results
+    // are in the "corners" of the pseudo-rectangle.
+
+    std::vector<ArticleGeoPoint> intermediateResults;
+    std::vector<std::pair<uint32_t, size_t> > distances; // pairs of distance and point index in list
+    uint32_t radiusCM = 10000; // 100 meters
+    for (; ; radiusCM *= 2)
+    {
+      std::pair<GeoPoint, GeoPoint> rect = point.enclosingPseudoRectangle(radiusCM);
+      // Trying 4 * maxResults, but it might still miss some close results if many are in the "corners".
+      bool haveMore = findArticlesByGeoArea(rect.first, rect.second, 4 * maxResults, intermediateResults);
+      if (!haveMore && radiusCM < 1000000000)
+        continue;
+    }
+    for (size_t i = 0; i < intermediateResults.size(); ++i)
+    {
+      distances.push_back(std::make_pair(point.distance(intermediateResults[i]), i));
+    }
+    std::sort(distances.begin(), distances.end());
+    for (size_t i = 0; i < std::min(distances.size(), maxResults); ++i)
+      results.push_back(intermediateResults[distances[i].second]);
   }
 
   File::const_iterator File::findByTitle(char ns, const std::string& title)

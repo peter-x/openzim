@@ -24,6 +24,7 @@
 #include <istream>
 #include <ostream>
 #include <limits>
+#include <cmath>
 #include <zim/zim.h>
 #include <zim/endian.h>
 
@@ -53,9 +54,13 @@ namespace zim
 
   struct GeoPoint
   {
+      static const double microDegreesToRad;
+      static const double quadraticMeanRadiusCM;
       uint32_t latitude;
       uint32_t longitude;
 
+      GeoPoint() {}
+      GeoPoint(uint32_t _latitude, uint32_t _longitude): latitude(_latitude), longitude(_longitude) {}
       uint32_t axisValue(unsigned axis) const
       {
         return axis == 0 ? latitude : longitude;
@@ -64,7 +69,24 @@ namespace zim
       {
         return axis == 0 ? latitude : longitude;
       }
+      /// @returns the geodetic distance between this point and @a _other in centimeters.
+      uint32_t distance(const GeoPoint& _other) const
+      {
+        double latArc = microDegreesToRad * (Latitude::toMicroDegrees(latitude) - Latitude::toMicroDegrees(_other.latitude));
+        double longArc = microDegreesToRad * (Longitude::toMicroDegrees(longitude) - Longitude::toMicroDegrees(_other.longitude));
+        double latH = std::sin(latArc * .5);
+        latH *= latH;
+        double longH = std::sin(longArc * .5);
+        longH *= longH;
+        double tmp = std::cos(microDegreesToRad * Latitude::toMicroDegrees(latitude)) *
+                     std::cos(microDegreesToRad * Latitude::toMicroDegrees(_other.latitude));
+        return uint32_t(quadraticMeanRadiusCM * 2.0 * std::asin(std::sqrt(latH + tmp * longH)));
+      }
       bool valid() const { return latitude != 0 || longitude != 0; }
+      bool operator<(GeoPoint const& _other) const
+      {
+        return latitude < _other.latitude || longitude < _other.longitude;
+      }
       bool operator<=(GeoPoint const& _other) const
       {
         return latitude <= _other.latitude && longitude <= _other.longitude;
@@ -72,6 +94,30 @@ namespace zim
       bool operator!=(GeoPoint const& _other) const
       {
         return latitude != _other.latitude || longitude != _other.longitude;
+      }
+      GeoPoint operator-(GeoPoint const& _diff) const
+      {
+        GeoPoint r;
+        r.latitude = _diff.latitude < latitude ? latitude - _diff.latitude : 0;
+        r.longitude = _diff.longitude < longitude ? longitude - _diff.longitude : 0;
+        return r;
+      }
+      GeoPoint operator+(GeoPoint const& _diff) const
+      {
+        GeoPoint r;
+        const uint32_t max = std::numeric_limits<uint32_t>::max();
+        r.latitude = uint64_t(_diff.latitude) + latitude <= max ? latitude + _diff.latitude : max;
+        r.longitude = uint64_t(_diff.longitude) + longitude <= max ? longitude + _diff.longitude : max;
+        return r;
+      }
+      /// @returns a pseudo-rectangle approximately containing a circle of distanceCM cm around this point.
+      std::pair<GeoPoint, GeoPoint> enclosingPseudoRectangle(uint32_t radiusCM) const
+      {
+        GeoPoint diff;
+        diff.latitude = Latitude::fromMicroDegrees(std::asin(radiusCM / quadraticMeanRadiusCM) / microDegreesToRad);
+        double longRadiusCM = std::cos(Latitude::toMicroDegrees(latitude) * microDegreesToRad) * quadraticMeanRadiusCM;
+        diff.longitude = Longitude::fromMicroDegrees(std::asin(radiusCM / longRadiusCM) / microDegreesToRad);
+        return std::make_pair(*this - diff, *this + diff);
       }
   };
 
