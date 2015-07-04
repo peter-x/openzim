@@ -24,6 +24,8 @@ log_define("zim.geopoint")
 
 namespace zim
 {
+  const double GeoPoint::microDegreesToRad = 1.7453292519943295769236907684886e-08;
+  const double GeoPoint::quadraticMeanRadiusCM = 637279756.0856;
 
   std::ostream& operator<<(std::ostream& out, const ArticleGeoPoint& p)
   {

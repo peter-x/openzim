@@ -90,6 +90,7 @@ namespace zim
       /// Searches the given quasi-rectangular area for articles. @returns true if there are more
       /// than maxResults results.
       bool findArticlesByGeoArea(const GeoPoint& min, const GeoPoint& max, size_t maxResults, std::vector<ArticleGeoPoint>& results);
+      void findClosestArticles(const GeoPoint& point, size_t maxResults, std::vector<ArticleGeoPoint>& results);
 
       bool good() const    { return impl.getPointer() != 0; }
       time_t getMTime() const   { return impl->getMTime(); }
