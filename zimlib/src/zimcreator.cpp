@@ -612,7 +612,8 @@ namespace zim
 
       // write geo index
 
-      out << geoIndex;
+      std::string geoIndexBytes = geoIndex.str();
+      out.write(geoIndexBytes.c_str(), geoIndexBytes.length());
 
       log_debug("after writing geoIdx - pos=" << out.tellp());
 
