@@ -394,6 +394,7 @@ namespace zim
       if (end < begin + 10 || end == std::adjacent_find(begin, end, std::not_equal_to<ArticleGeoPoint>()))
       {
         toLittleEndian(uint32_t(0), data);
+        geoIndex.write(data, 4);
         if (end <= begin)
           toLittleEndian(uint32_t(0), data);
         else
