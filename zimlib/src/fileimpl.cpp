@@ -99,6 +99,7 @@ namespace zim
 
     if (header.hasGeoIdx())
     {
+      zimFile.seekg(header.getGeoIdxPos());
       uint32_t indexCount = readFromLittleEndian<uint32_t>(zimFile, "invalid geo index header");
       for (unsigned i = 0; i < indexCount + 1; ++i)
       {
@@ -380,6 +381,7 @@ namespace zim
   bool FileImpl::findArticlesByGeoAreaInt(GeoPoint min, GeoPoint max, size_t maxResults, unsigned depth, std::vector<ArticleGeoPoint> &results)
   {
     uint32_t value = readFromLittleEndian<uint32_t>(zimFile, "failed to read geo index");
+
     if (value == 0)
     {
       uint32_t count = readFromLittleEndian<uint32_t>(zimFile, "failed to read geo index");

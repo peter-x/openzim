@@ -56,6 +56,7 @@ class ZimDumper
     void dumpIndex();
     void printPage();
     void listArticles(bool info, bool listTable, bool extra);
+    void listGeoArticles(const char* boundingBox);
     void listArticle(const zim::Article& article, bool extra);
     void listArticleT(const zim::Article& article, bool extra);
     void listArticle(bool extra)
@@ -237,6 +238,44 @@ void ZimDumper::listArticles(bool info, bool listTable, bool extra)
       listArticle(*it, extra);
     else
       std::cout << it->getUrl() << '\n';
+  }
+}
+
+void ZimDumper::listGeoArticles(const char *boundingBox)
+{
+  log_trace("listGeoArticles(" << boundingBox << ") verbose=" << verbose);
+  int32_t bbox[4]; // north, west, south, east
+  for (unsigned i = 0; i < 4; ++i)
+  {
+    bool negative = false;
+    int32_t value = 0;
+    while (*boundingBox == ' ')
+        ++boundingBox;
+    if (*boundingBox == '-')
+    {
+      negative = true;
+      ++boundingBox;
+    }
+    for (; '0' <= *boundingBox && *boundingBox <= '9'; ++boundingBox)
+    {
+      value = value * 10 + (*boundingBox - '0');
+    }
+    bbox[i] = negative ? -value : value;
+  }
+
+  zim::GeoPoint min, max;
+  min.latitude = zim::Latitude::fromMicroDegrees(bbox[2]);
+  max.latitude = zim::Latitude::fromMicroDegrees(bbox[0]);
+  min.longitude = zim::Longitude::fromMicroDegrees(bbox[1]);
+  max.longitude = zim::Longitude::fromMicroDegrees(bbox[3]);
+  std::vector<zim::ArticleGeoPoint> results;
+  file.findArticlesByGeoArea(min, max, 1000, results);
+  for (std::vector<zim::ArticleGeoPoint>::const_iterator it = results.begin(); it != results.end(); ++it)
+  {
+      std::cout << "Found "
+      << zim::Latitude::toMicroDegrees(it->latitude) << " " << zim::Longitude::toMicroDegrees(it->longitude) << std::endl;
+
+    listArticleT(file.getArticle(it->index), false);
   }
 }
 
@@ -437,6 +476,7 @@ int main(int argc, char* argv[])
     zim::Arg<const char*> url(argc, argv, 'u');
     zim::Arg<bool> list(argc, argv, 'l');
     zim::Arg<bool> tableList(argc, argv, 'L');
+    zim::Arg<const char*> geoArea(argc, argv, 'g');
     zim::Arg<zim::size_type> indexOffset(argc, argv, 'o');
     zim::Arg<bool> extra(argc, argv, 'x');
     zim::Arg<char> ns(argc, argv, 'n', 'A');  // namespace
@@ -451,24 +491,25 @@ int main(int argc, char* argv[])
       std::cerr << "usage: " << argv[0] << " [options] zimfile\n"
                    "\n"
                    "options:\n"
-                   "  -F        print fileinfo\n"
-                   "  -N ns     print info about namespace\n"
-                   "  -i        print info about articles\n"
-                   "  -d        print data of articles\n"
-                   "  -p        print page\n"
-                   "  -f title  find article\n"
-                   "  -u url    find article by url\n"
-                   "  -t        sort (and find) articles by title instead of url\n"
-                   "  -l        list articles\n"
-                   "  -L        list articles as table\n"
-                   "  -o idx    locate article by index\n"
-                   "  -x        print extra parameters\n"
-                   "  -n ns     specify namespace (default 'A')\n"
-                   "  -D dir    dump all files into directory\n"
-                   "  -v        verbose (print uncompressed length of articles when -i is set)\n"
-                   "                    (print namespaces with counts with -F)\n"
-                   "  -Z        dump index data\n"
-                   "  -C        verify checksum\n"
+                   "  -F            print fileinfo\n"
+                   "  -N ns         print info about namespace\n"
+                   "  -i            print info about articles\n"
+                   "  -d            print data of articles\n"
+                   "  -p            print page\n"
+                   "  -f title      find article\n"
+                   "  -u url        find article by url\n"
+                   "  -t            sort (and find) articles by title instead of url\n"
+                   "  -l            list articles\n"
+                   "  -L            list articles as table\n"
+                   "  -g \"n w s e\"  list articles in geo area (micro degrees)\n"
+                   "  -o idx        locate article by index\n"
+                   "  -x            print extra parameters\n"
+                   "  -n ns         specify namespace (default 'A')\n"
+                   "  -D dir        dump all files into directory\n"
+                   "  -v            verbose (print uncompressed length of articles when -i is set)\n"
+                   "                        (print namespaces with counts with -F)\n"
+                   "  -Z            dump index data\n"
+                   "  -C            verify checksum\n"
                    "\n"
                    "examples:\n"
                    "  " << argv[0] << " -F wikipedia.zim\n"
@@ -478,6 +519,8 @@ int main(int argc, char* argv[])
                    "  " << argv[0] << " -f Auto -l wikipedia.zim\n"
                    "  " << argv[0] << " -f Auto -l -i -v wikipedia.zim\n"
                    "  " << argv[0] << " -o 123159 -l -i wikipedia.zim\n"
+                   "  " << argv[0] << " -g \"52533050 13372290 52506532 13425463\" wikipedia.zim "
+                                           "          # get all articles in central Berlin\n"
                  << std::flush;
       return -1;
     }
@@ -513,6 +556,8 @@ int main(int argc, char* argv[])
       app.printPage();
     else if (list || tableList)
       app.listArticles(info, tableList, extra);
+    else if (geoArea)
+      app.listGeoArticles(geoArea);
     else if (info)
       app.listArticle(extra);
     else if (zint)
